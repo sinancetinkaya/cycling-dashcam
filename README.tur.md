@@ -2,11 +2,6 @@
 
 Mobil tarayıcılar için tasarlanmış, yüksek performanslı ve telemetri katmanlı bir bisiklet araç kamerası. Sürüşlerinizi gerçek zamanlı hız, GPS, eğim, kalp atış hızı ve güç ölçer verileriyle, bu verileri doğrudan video dosyasına "işleyerek" kaydedin.
 
-## 🚀 Public URL
-**[https://ais-pre-sudvw57uzwst36kzco752i-116531999529.europe-west1.run.app](https://ais-pre-sudvw57uzwst36kzco752i-116531999529.europe-west1.run.app)**
-
----
-
 ## ✨ Özellikler
 
 ### Ana Ekran Arayüzü
