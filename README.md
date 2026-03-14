@@ -1,3 +1,4 @@
+# [Türkçe](https://github.com/sinancetinkaya/cycling-dashcam/blob/main/README.tur.md)
 # Cycling Dashcam PWA
 
 A high-performance, telemetry-overlay cycling dashcam designed for mobile browsers. Record your rides with real-time speed, GPS, grade, heart rate, and power meter data "burnt" directly into the video file.
@@ -72,7 +73,7 @@ The central button changes behavior based on your **Loop Mode** setting:
 
 ## 🛠 Why a PWA?
 
-We chose a **Progressive Web App (PWA)** over a native Android/iOS app for several key reasons:
+**Progressive Web App (PWA)** is chosen over a native Android/iOS app for several key reasons:
 
 1. **Zero Friction**: No App Store or Play Store downloads required. Instant updates.
 2. **The "Overlay" Challenge**: In native Android development, burning real-time telemetry (like GPS and Bluetooth data) into a video file is notoriously difficult. It requires complex MediaCodec configurations or OpenGL ES layers that often behave differently across various phone manufacturers.
