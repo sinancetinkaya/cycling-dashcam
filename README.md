@@ -1,4 +1,4 @@
-# [Türkçe](https://github.com/sinancetinkaya/cycling-dashcam/blob/main/README.tur.md)
+# [Türkçe](https://github.com/sinancetinkaya/cycling-dashcam/blob/main/README.tr.md)
 # Cycling Dashcam PWA
 
 A high-performance, telemetry-overlay cycling dashcam designed for mobile browsers. Record your rides with real-time speed, GPS, grade, heart rate, and power meter data "burnt" directly into the video file.
