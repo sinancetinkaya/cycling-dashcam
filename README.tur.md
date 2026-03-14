@@ -24,14 +24,15 @@ Mobil tarayıcılar için tasarlanmış, yüksek performanslı ve telemetri katm
 #### 🎥 Kayıt ve Loop Modu
 Kayıt butonu **Loop Modu** ayarınıza bağlı olarak davranış değiştirir:
 
-**Standart Mod (Loop Modu Kapalı):**
-- **🔴 Start Recording**: Cihazınıza doğrudan kaydedilen sürekli bir kaydı başlatır.
-- **⏹️ Stop Recording**: Video dosyasını sonlandırır ve galerinize ekler.
+**Loop Modu Kapalı:**
+- **🔴 Start Recording**: Video kaydını başlatır.
+- **⏹️ Stop Recording**: Video kaydını sonlandırır.
 
-**Loop Modu:**
-- **🟠 Start Loop**: 60 saniyelik arka plan RAM'i etkinleştirir. Buton kehribar rengine döner.
-- **⚠️ INCIDENT**: Yalnızca Loop Modu aktifken görünür. RAM'e alınan son 60 saniyelik videoyu kaydetmek için buna dokunun.
-- **⏹️ Stop Loop**: Loop modunu devre dışı bırakır ve RAM'i temizler.
+**Loop Modu Açık:**
+- **🟠 Start Loop**: Son 60 saniyenin videosunu RAM hafızada tutar ama dosyaya kaydetmez.
+- **⚠️ INCIDENT**: RAM hafızadaki son 60 saniyenin videosunu dosyaya kaydeder.
+- **G-Force**: Cihaz G-Force ayarında secilen degerde bir darbe algılarsa(kaza gibi) RAM hafızadaki son 60 saniyenin videosunu dosyaya kaydeder..
+- **⏹️ Stop Loop**: Loop modunu sonlandırır.
 
 ---
 
