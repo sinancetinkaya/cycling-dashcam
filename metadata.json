@@ -1,0 +1,5 @@
+{
+  "name": "Cycling DashCam",
+  "description": "A dashcam app with GPS telemetry overlays.",
+  "requestFramePermissions": ["camera", "microphone", "geolocation"]
+}
