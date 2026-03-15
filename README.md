@@ -7,7 +7,7 @@ A high-performance, telemetry-overlay cycling dashcam designed for mobile browse
 **[https://ais-pre-sudvw57uzwst36kzco752i-116531999529.europe-west1.run.app](https://ais-pre-sudvw57uzwst36kzco752i-116531999529.europe-west1.run.app)**
 
 ---
-
+![myimage](screenshots/1.png?raw=true) ![myimage](screenshots/2.png?raw=true)
 ## ✨ Features
 
 ### Main Screen Interface
