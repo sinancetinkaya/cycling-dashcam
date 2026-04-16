@@ -3,7 +3,7 @@ import { useTelemetry } from '../hooks/useTelemetry';
 import { useHeartRateMonitor } from '../hooks/useHeartRateMonitor';
 import { usePowerMeter } from '../hooks/usePowerMeter';
 import { APP_VERSION } from '../constants';
-import { Circle, Square, Camera, Download, Settings, Maximize, Minimize, RefreshCw, Terminal, Heart, Zap } from 'lucide-react';
+import { Circle, Square, Camera, Download, Settings, Maximize, Minimize, RefreshCw, Terminal, Heart, Zap, Navigation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DebugModal } from './DebugModal';
 
@@ -67,6 +67,55 @@ export default function Dashcam() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>((window as any).deferredPrompt); // Initialize from global
   const [installStatus, setInstallStatus] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [sensorMenu, setSensorMenu] = useState<'hr' | 'pm' | 'gps' | null>(null);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setShowSettings(false);
+      setSensorMenu(null);
+      setShowDebugModal(false);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const longPressTimerRef = useRef<any>(null);
+  const isLongPressActive = useRef(false);
+
+  const handleSensorPointerDown = (type: 'hr' | 'pm' | 'gps') => {
+    isLongPressActive.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressActive.current = true;
+      window.history.pushState({ menu: 'sensor' }, '');
+      setSensorMenu(type);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 600);
+  };
+
+  const handleSensorPointerUp = (e: React.PointerEvent, action: () => void) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    
+    if (isLongPressActive.current) {
+      e.preventDefault();
+      e.stopPropagation();
+    } else {
+      action();
+    }
+  };
+
+  const forgetSensor = (type: 'hr' | 'pm') => {
+    if (type === 'hr') {
+      localStorage.removeItem('dashcam_hr_device_id');
+      disconnectHeartRate();
+    } else {
+      localStorage.removeItem('dashcam_pm_device_id');
+      disconnectPowerMeter();
+    }
+    window.history.back();
+  };
 
   // Loop Mode State
   const [isLooping, setIsLooping] = useState(false);
@@ -257,11 +306,16 @@ export default function Dashcam() {
       speed: true,
       grade: true,
       gps: true,
+      gpsSmoothing: 3,
       timestamp: true,
       heartRate: true,
       maxHeartRate: 180,
+      hrSmoothing: 3,
+      hrCalibration: 0,
       power: true,
       ftp: 200,
+      powerSmoothing: 3,
+      powerCalibration: 0,
       useMph: false,
       loopMode: false,
       gSensor: true, // New: Enable G-sensor detection
@@ -303,13 +357,13 @@ export default function Dashcam() {
   const animationRef = useRef<number>(0); // ID for the requestAnimationFrame loop
 
   // Custom hook to get real-time GPS and movement data
-  const telemetry = useTelemetry();
+  const telemetry = useTelemetry(overlayConfig.gpsSmoothing);
   const telemetryRef = useRef(telemetry);
 
-  const { heartRate, connect: connectHeartRate, disconnect: disconnectHeartRate, isConnected: isHeartRateConnected, isConnecting: isHeartRateConnecting, error: heartRateError } = useHeartRateMonitor();
+  const { heartRate, connect: connectHeartRate, disconnect: disconnectHeartRate, isConnected: isHeartRateConnected, isConnecting: isHeartRateConnecting, error: heartRateError } = useHeartRateMonitor(overlayConfig.hrSmoothing, overlayConfig.hrCalibration);
   const heartRateRef = useRef(heartRate);
 
-  const { power, connect: connectPowerMeter, disconnect: disconnectPowerMeter, isConnected: isPowerMeterConnected, isConnecting: isPowerMeterConnecting, error: powerMeterError } = usePowerMeter();
+  const { power, connect: connectPowerMeter, disconnect: disconnectPowerMeter, isConnected: isPowerMeterConnected, isConnecting: isPowerMeterConnecting, error: powerMeterError } = usePowerMeter(overlayConfig.powerSmoothing, overlayConfig.powerCalibration);
   const powerRef = useRef(power);
 
   // Auto-connect to sensors on startup if they were previously saved
@@ -1037,45 +1091,309 @@ export default function Dashcam() {
             </button>
 
             <button
-              onClick={() => isHeartRateConnected ? disconnectHeartRate() : connectHeartRate()}
+              onPointerDown={() => handleSensorPointerDown('hr')}
+              onPointerUp={(e) => handleSensorPointerUp(e, () => isHeartRateConnected ? disconnectHeartRate() : connectHeartRate())}
+              onPointerLeave={() => {
+                if (longPressTimerRef.current) {
+                  clearTimeout(longPressTimerRef.current);
+                  longPressTimerRef.current = null;
+                }
+              }}
               disabled={isHeartRateConnecting}
-              className={`w-12 h-12 backdrop-blur-md border rounded-full flex items-center justify-center transition-all ${
+              className={`w-12 h-12 backdrop-blur-md border rounded-full flex items-center justify-center transition-all touch-none ${
                 isHeartRateConnected ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30' : 
                 heartRateError ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30' :
                 isHeartRateConnecting ? 'bg-black/40 border-white/20 text-white/50 animate-pulse' : 
                 'bg-black/40 border-white/20 text-white hover:bg-black/60'
               }`}
-              title={isHeartRateConnected ? "Disconnect Heart Rate" : heartRateError ? `Error: ${heartRateError}` : "Connect Heart Rate"}
+              title={isHeartRateConnected ? "Disconnect Heart Rate (Long press for menu)" : heartRateError ? `Error: ${heartRateError}` : "Connect Heart Rate (Long press for menu)"}
             >
               <Heart className={`w-6 h-6 ${isHeartRateConnected ? 'fill-emerald-400' : ''}`} />
             </button>
 
             <button
-              onClick={() => isPowerMeterConnected ? disconnectPowerMeter() : connectPowerMeter()}
+              onPointerDown={() => handleSensorPointerDown('pm')}
+              onPointerUp={(e) => handleSensorPointerUp(e, () => isPowerMeterConnected ? disconnectPowerMeter() : connectPowerMeter())}
+              onPointerLeave={() => {
+                if (longPressTimerRef.current) {
+                  clearTimeout(longPressTimerRef.current);
+                  longPressTimerRef.current = null;
+                }
+              }}
               disabled={isPowerMeterConnecting}
-              className={`w-12 h-12 backdrop-blur-md border rounded-full flex items-center justify-center transition-all ${
+              className={`w-12 h-12 backdrop-blur-md border rounded-full flex items-center justify-center transition-all touch-none ${
                 isPowerMeterConnected ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30' : 
                 powerMeterError ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30' :
                 isPowerMeterConnecting ? 'bg-black/40 border-white/20 text-white/50 animate-pulse' : 
                 'bg-black/40 border-white/20 text-white hover:bg-black/60'
               }`}
-              title={isPowerMeterConnected ? "Disconnect Power Meter" : powerMeterError ? `Error: ${powerMeterError}` : "Connect Power Meter"}
+              title={isPowerMeterConnected ? "Disconnect Power Meter (Long press for menu)" : powerMeterError ? `Error: ${powerMeterError}` : "Connect Power Meter (Long press for menu)"}
             >
               <Zap className={`w-6 h-6 ${isPowerMeterConnected ? 'fill-emerald-400' : ''}`} />
             </button>
           </div>
         </div>
 
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-black/60 transition-all"
-        >
-          <Settings className={`w-6 h-6 transition-transform ${showSettings ? 'rotate-90' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* GPS Status Indicator */}
+          <div 
+            className="flex items-center gap-1.5 px-3 h-12 bg-black/40 backdrop-blur-md border border-white/20 rounded-full text-white cursor-pointer select-none active:scale-95 transition-transform"
+            title={telemetry.altitude !== null ? "3D GPS Lock (Altitude Available)" : "2D GPS Lock (No Altitude)"}
+            onPointerDown={() => handleSensorPointerDown('gps')}
+            onPointerUp={(e) => handleSensorPointerUp(e, () => {})} // No single-click action for GPS
+            onPointerLeave={() => {
+              if (longPressTimerRef.current) {
+                clearTimeout(longPressTimerRef.current);
+                longPressTimerRef.current = null;
+              }
+            }}
+          >
+            <div className="flex flex-col items-center leading-none">
+              <span className={`text-[10px] font-black uppercase tracking-tighter ${telemetry.altitude !== null ? 'text-emerald-400' : 'text-orange-400'}`}>
+                GPS {telemetry.altitude !== null ? '3D' : '2D'}
+              </span>
+              <span className="text-xs font-bold tabular-nums">
+                {telemetry.accuracy ? `±${Math.round(telemetry.accuracy)}m` : '---'}
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              if (!showSettings) {
+                window.history.pushState({ menu: 'settings' }, '');
+                setShowSettings(true);
+              } else {
+                window.history.back();
+              }
+            }}
+            className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-black/60 transition-all"
+          >
+            <Settings className={`w-6 h-6 transition-transform ${showSettings ? 'rotate-90' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Layer 4: Settings Panel (Overlay Configuration) */}
       <AnimatePresence>
+        {sensorMenu && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="w-full max-w-xs bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-4 border-b border-white/5 bg-white/5">
+                <h3 className="text-white font-medium flex items-center gap-2">
+                  {sensorMenu === 'hr' ? <Heart className="w-4 h-4 text-emerald-400" /> : 
+                   sensorMenu === 'pm' ? <Zap className="w-4 h-4 text-emerald-400" /> :
+                   <Navigation className="w-4 h-4 text-emerald-400" />}
+                  {sensorMenu === 'hr' ? 'Heart Rate Sensor' : 
+                   sensorMenu === 'pm' ? 'Power Meter Sensor' :
+                   'GPS & Telemetry'}
+                </h3>
+              </div>
+              <div className="p-4 space-y-4">
+                {/* Sensor Specific Settings */}
+                <div className="space-y-4">
+                  {sensorMenu === 'gps' ? (
+                    <>
+                      <label className="flex items-center justify-between cursor-pointer group">
+                        <span className="text-xs text-white/50 font-mono uppercase tracking-wider">Show GPS Overlay</span>
+                        <input
+                          type="checkbox"
+                          checked={overlayConfig.gps}
+                          onChange={() => setOverlayConfig(prev => ({ ...prev, gps: !prev.gps }))}
+                          className="sr-only"
+                        />
+                        <div className={`w-10 h-5 rounded-full transition-colors relative ${overlayConfig.gps ? 'bg-emerald-500' : 'bg-white/10'}`}>
+                          <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${overlayConfig.gps ? 'left-6' : 'left-1'}`} />
+                        </div>
+                      </label>
+                      <label className="flex items-center justify-between cursor-pointer group">
+                        <span className="text-xs text-white/50 font-mono uppercase tracking-wider">Show Speed Overlay</span>
+                        <input
+                          type="checkbox"
+                          checked={overlayConfig.speed}
+                          onChange={() => setOverlayConfig(prev => ({ ...prev, speed: !prev.speed }))}
+                          className="sr-only"
+                        />
+                        <div className={`w-10 h-5 rounded-full transition-colors relative ${overlayConfig.speed ? 'bg-emerald-500' : 'bg-white/10'}`}>
+                          <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${overlayConfig.speed ? 'left-6' : 'left-1'}`} />
+                        </div>
+                      </label>
+                      <label className="flex items-center justify-between cursor-pointer group">
+                        <span className="text-xs text-white/50 font-mono uppercase tracking-wider">Show Grade Overlay</span>
+                        <input
+                          type="checkbox"
+                          checked={overlayConfig.grade}
+                          onChange={() => setOverlayConfig(prev => ({ ...prev, grade: !prev.grade }))}
+                          className="sr-only"
+                        />
+                        <div className={`w-10 h-5 rounded-full transition-colors relative ${overlayConfig.grade ? 'bg-emerald-500' : 'bg-white/10'}`}>
+                          <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${overlayConfig.grade ? 'left-6' : 'left-1'}`} />
+                        </div>
+                      </label>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-white/50 font-mono uppercase tracking-wider">Smoothing</span>
+                        <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
+                          <button 
+                            onClick={() => setOverlayConfig(prev => ({ ...prev, gpsSmoothing: Math.max(1, prev.gpsSmoothing - 1) }))}
+                            className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            value={overlayConfig.gpsSmoothing}
+                            readOnly
+                            className="w-8 bg-transparent border-none text-center font-mono text-sm text-white focus:outline-none"
+                          />
+                          <button 
+                            onClick={() => setOverlayConfig(prev => ({ ...prev, gpsSmoothing: Math.min(20, prev.gpsSmoothing + 1) }))}
+                            className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <label className="flex items-center justify-between cursor-pointer group">
+                      <span className="text-xs text-white/50 font-mono uppercase tracking-wider">
+                        Show {sensorMenu === 'hr' ? 'Heart Rate' : 'Power'} Overlay
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={sensorMenu === 'hr' ? overlayConfig.heartRate : overlayConfig.power}
+                        onChange={() => {
+                          if (sensorMenu === 'hr') setOverlayConfig(prev => ({ ...prev, heartRate: !prev.heartRate }));
+                          else setOverlayConfig(prev => ({ ...prev, power: !prev.power }));
+                        }}
+                        className="sr-only"
+                      />
+                      <div className={`w-10 h-5 rounded-full transition-colors relative ${ (sensorMenu === 'hr' ? overlayConfig.heartRate : overlayConfig.power) ? 'bg-emerald-500' : 'bg-white/10'}`}>
+                        <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${ (sensorMenu === 'hr' ? overlayConfig.heartRate : overlayConfig.power) ? 'left-6' : 'left-1'}`} />
+                      </div>
+                    </label>
+                  )}
+
+                  {sensorMenu !== 'gps' && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-white/50 font-mono uppercase tracking-wider">Smoothing</span>
+                        <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
+                          <button 
+                            onClick={() => {
+                              const key = sensorMenu === 'hr' ? 'hrSmoothing' : 'powerSmoothing';
+                              setOverlayConfig(prev => ({ ...prev, [key]: Math.max(1, (prev[key] as number) - 1) }));
+                            }}
+                            className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            value={sensorMenu === 'hr' ? overlayConfig.hrSmoothing : overlayConfig.powerSmoothing}
+                            readOnly
+                            className="w-8 bg-transparent border-none text-center font-mono text-sm text-white focus:outline-none"
+                          />
+                          <button 
+                            onClick={() => {
+                              const key = sensorMenu === 'hr' ? 'hrSmoothing' : 'powerSmoothing';
+                              setOverlayConfig(prev => ({ ...prev, [key]: Math.min(20, (prev[key] as number) + 1) }));
+                            }}
+                            className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-white/50 font-mono uppercase tracking-wider">Calibration</span>
+                        <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
+                          <button 
+                            onClick={() => {
+                              const key = sensorMenu === 'hr' ? 'hrCalibration' : 'powerCalibration';
+                              setOverlayConfig(prev => ({ ...prev, [key]: (prev[key] as number) - 1 }));
+                            }}
+                            className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            value={sensorMenu === 'hr' ? overlayConfig.hrCalibration : overlayConfig.powerCalibration}
+                            readOnly
+                            className="w-8 bg-transparent border-none text-center font-mono text-sm text-white focus:outline-none"
+                          />
+                          <button 
+                            onClick={() => {
+                              const key = sensorMenu === 'hr' ? 'hrCalibration' : 'powerCalibration';
+                              setOverlayConfig(prev => ({ ...prev, [key]: (prev[key] as number) + 1 }));
+                            }}
+                            className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded transition-colors"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-white/50 font-mono uppercase tracking-wider">
+                          {sensorMenu === 'hr' ? 'Max Heart Rate' : 'Max FTP'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={sensorMenu === 'hr' ? "100" : "50"}
+                            max={sensorMenu === 'hr' ? "250" : "600"}
+                            value={(sensorMenu === 'hr' ? overlayConfig.maxHeartRate : overlayConfig.ftp) || (sensorMenu === 'hr' ? 180 : 200)}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value);
+                              if (sensorMenu === 'hr') setOverlayConfig(prev => ({ ...prev, maxHeartRate: val || 180 }));
+                              else setOverlayConfig(prev => ({ ...prev, ftp: val || 200 }));
+                            }}
+                            className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 font-mono text-sm text-white text-center focus:outline-none focus:border-emerald-500 transition-colors"
+                          />
+                          <span className="text-[10px] text-white/30 font-mono uppercase">{sensorMenu === 'hr' ? 'BPM' : 'W'}</span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-white/30 leading-tight">
+                        {sensorMenu === 'hr' 
+                          ? 'Used to calculate heart rate zones and percentage.' 
+                          : 'Used to calculate power zones and intensity.'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {sensorMenu !== 'gps' && (
+                <>
+                  <div className="h-px bg-white/5" />
+                  <div className="p-4 space-y-1">
+                    <button
+                      onClick={() => {
+                        if (sensorMenu === 'hr') connectHeartRate({ forcePicker: true });
+                        else connectPowerMeter({ forcePicker: true });
+                        window.history.back();
+                      }}
+                      className="w-full p-3 text-left text-white hover:bg-white/10 rounded-xl transition-colors flex items-center gap-3"
+                    >
+                      <RefreshCw className="w-5 h-5 text-blue-400" />
+                      <span>Sensors</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </div>
+        )}
+
         {showSettings && (
           <motion.div
             initial={{ opacity: 0, x: 100 }}
@@ -1157,36 +1475,6 @@ export default function Dashcam() {
                   )}
                 </AnimatePresence>
               </div>
-              <div className="h-px bg-white/10 my-4" />
-
-              {/* Sensor Settings */}
-              <div className="space-y-2">
-                <h3 className="font-mono text-xs uppercase tracking-widest opacity-50 mb-2">Sensors</h3>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="font-mono text-xs opacity-80">Max HR (for %)</span>
-                  <input
-                    type="number"
-                    min="100"
-                    max="250"
-                    value={overlayConfig.maxHeartRate || 180}
-                    onChange={(e) => setOverlayConfig(prev => ({ ...prev, maxHeartRate: parseInt(e.target.value) || 180 }))}
-                    className="w-16 bg-white/10 border border-white/20 rounded px-2 py-1 font-mono text-xs text-white text-center focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between mt-2">
-                  <span className="font-mono text-xs opacity-80">FTP (for %)</span>
-                  <input
-                    type="number"
-                    min="50"
-                    max="500"
-                    value={overlayConfig.ftp || 200}
-                    onChange={(e) => setOverlayConfig(prev => ({ ...prev, ftp: parseInt(e.target.value) || 200 }))}
-                    className="w-16 bg-white/10 border border-white/20 rounded px-2 py-1 font-mono text-xs text-white text-center focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
               <div className="h-px bg-white/10 my-4" />
 
               {/* Recording Quality Settings */}
@@ -1379,7 +1667,7 @@ export default function Dashcam() {
               )}
 
               <div className="h-px bg-white/10 my-2" />
-              {Object.entries(overlayConfig).filter(([k]) => !['altitude', 'useMph', 'loopMode', 'gSensor', 'gThreshold', 'videoQuality', 'audioQuality', 'videoCodec', 'audioCodec', 'videoBitrate', 'audioBitrate', 'maxHeartRate', 'videoOrientation', 'videoFramerate', 'ftp'].includes(k)).map(([key, value]) => (
+              {Object.entries(overlayConfig).filter(([k]) => !['altitude', 'useMph', 'loopMode', 'gSensor', 'gThreshold', 'videoQuality', 'audioQuality', 'videoCodec', 'audioCodec', 'videoBitrate', 'audioBitrate', 'maxHeartRate', 'videoOrientation', 'videoFramerate', 'ftp', 'heartRate', 'power', 'speed', 'grade', 'gps', 'hrSmoothing', 'powerSmoothing', 'gpsSmoothing', 'hrCalibration', 'powerCalibration'].includes(k)).map(([key, value]) => (
                 <label key={key} className="flex items-center justify-between cursor-pointer group">
                   <span className="font-mono text-sm capitalize">{key}</span>
                   <input
@@ -1396,7 +1684,10 @@ export default function Dashcam() {
               
               <div className="mt-6 pt-4 border-t border-white/10 flex flex-col items-center gap-1">
                 <button
-                  onClick={() => setShowDebugModal(true)}
+                  onClick={() => {
+                    window.history.pushState({ menu: 'debug' }, '');
+                    setShowDebugModal(true);
+                  }}
                   className="w-full mb-4 flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   <Terminal className="w-4 h-4" /> Open Debug Logs
@@ -1410,7 +1701,7 @@ export default function Dashcam() {
       </AnimatePresence>
 
       {/* Debug Modal */}
-      {showDebugModal && <DebugModal onClose={() => setShowDebugModal(false)} />}
+      {showDebugModal && <DebugModal onClose={() => window.history.back()} />}
 
       {/* Layer 5: Main UI Controls (Snapshot & Record) */}
       <div className="absolute bottom-8 left-0 right-0 flex justify-center items-center gap-8 md:gap-12">

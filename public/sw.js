@@ -1,5 +1,5 @@
 // Service Worker: Handles offline caching and PWA functionality
-const CACHE_NAME = 'cycling-dashcam-v1.17.30';
+const CACHE_NAME = 'cycling-dashcam-v1.17.45';
 const ASSETS = [
   '/',
   '/index.html',

@@ -7,6 +7,7 @@ export interface TelemetryData {
   latitude: number;
   longitude: number;
   altitude: number | null;
+  accuracy: number | null;
   gForce: {
     x: number;
     y: number;
@@ -33,13 +34,14 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
 }
 
 // useTelemetry: Custom hook that watches the device's GPS and calculates speed/climb data.
-export function useTelemetry() {
+export function useTelemetry(smoothing: number = 3) {
   const [data, setData] = useState<TelemetryData>({
     speedKmh: 0,
     climbRatePct: 0,
     latitude: 0,
     longitude: 0,
     altitude: null,
+    accuracy: null,
     gForce: { x: 0, y: 0, z: 0, total: 1 }, // 1G is normal gravity
   });
 
@@ -54,6 +56,12 @@ export function useTelemetry() {
   // Use refs for smoothing
   const climbRateHistoryRef = useRef<number[]>([]);
   const speedHistoryRef = useRef<number[]>([]);
+  const smoothingRef = useRef(smoothing);
+
+  // Update smoothing ref when prop changes
+  if (smoothingRef.current !== smoothing) {
+    smoothingRef.current = smoothing;
+  }
 
   useEffect(() => {
     // 1. G-Force Tracking (Accelerometer)
@@ -84,14 +92,15 @@ export function useTelemetry() {
     // Start watching the device's position
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
-        const { latitude, longitude, altitude, speed } = position.coords;
+        const { latitude, longitude, altitude, speed, accuracy } = position.coords;
         const now = position.timestamp;
 
         // 1. Speed Calculation: Browser provides speed in m/s, we convert to km/h
         const rawSpeedKmh = (speed || 0) * 3.6;
         
         speedHistoryRef.current.push(rawSpeedKmh);
-        if (speedHistoryRef.current.length > 3) speedHistoryRef.current.shift();
+        const currentSmoothing = Math.max(1, smoothingRef.current);
+        while (speedHistoryRef.current.length > currentSmoothing) speedHistoryRef.current.shift();
         const currentSpeedKmh = speedHistoryRef.current.reduce((a, b) => a + b, 0) / speedHistoryRef.current.length;
 
         let climbRate = 0;
@@ -114,7 +123,9 @@ export function useTelemetry() {
           if (dist > 1) {
             const instantClimbRate = (altDiff / dist) * 100;
             climbRateHistoryRef.current.push(instantClimbRate);
-            if (climbRateHistoryRef.current.length > 3) climbRateHistoryRef.current.shift();
+            // For climb rate, we might want slightly more smoothing than speed, or just use the same
+            // Let's use smoothing * 1.5 for climb rate as it's usually noisier, or just stick to smoothing
+            while (climbRateHistoryRef.current.length > currentSmoothing) climbRateHistoryRef.current.shift();
             climbRate = climbRateHistoryRef.current.reduce((a, b) => a + b, 0) / climbRateHistoryRef.current.length;
           } else if (climbRateHistoryRef.current.length > 0) {
             climbRate = climbRateHistoryRef.current.reduce((a, b) => a + b, 0) / climbRateHistoryRef.current.length;
@@ -129,6 +140,7 @@ export function useTelemetry() {
           latitude,
           longitude,
           altitude,
+          accuracy,
         }));
 
         // Store current position for the next update
